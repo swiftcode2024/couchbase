@@ -129,8 +129,8 @@ func checkNodeContinues(scope *gocb.Scope, gameId int64) {
 			log.Println(err)
 		}
 		// map[$1:0]
-		resultMap := result.(map[string]interface{})
-		fmt.Printf("节点顺序检查返回->%v\n", resultMap["$1"])
+		resultMap := result.([]interface{})[0].(map[string]interface{})
+		fmt.Printf("节点顺序检查返回->%v\n", resultMap["id"])
 	}
 
 	if err := queryResult.Err(); err != nil {
