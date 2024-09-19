@@ -70,16 +70,31 @@ func main() {
 		}
 		log.Printf("检查游戏:%v bbm:%v", gameId, bbm)
 
-		checkFlowContinues(defaultScope, gameId)
-		checkNodeContinues(defaultScope, gameId)
-		checkWeightEqZero(defaultScope, gameId, bbm)
-		checkWeightNeZero(defaultScope, gameId, bbm)
-		checkSummary(defaultScope, gameId)
+		err := checkFlowContinues(defaultScope, gameId)
+		if err != nil {
+			continue
+		}
+		err = checkNodeContinues(defaultScope, gameId)
+		if err != nil {
+			continue
+		}
+		err = checkWeightEqZero(defaultScope, gameId, bbm)
+		if err != nil {
+			continue
+		}
+		err = checkWeightNeZero(defaultScope, gameId, bbm)
+		if err != nil {
+			continue
+		}
+		err = checkSummary(defaultScope, gameId)
+		if err != nil {
+			continue
+		}
 
 	}
 }
 
-func checkFlowContinues(scope *gocb.Scope, gameId int64) {
+func checkFlowContinues(scope *gocb.Scope, gameId int64) error {
 	queryResult, err := scope.Query(
 		fmt.Sprintf(
 			"select count(*) from `%v-main` where consistent = false or sis[0].hashr not like '0:%%'", gameId),
@@ -89,7 +104,7 @@ func checkFlowContinues(scope *gocb.Scope, gameId int64) {
 	)
 	if err != nil {
 		log.Println(err)
-		return
+		return err
 	}
 
 	// Print each found Row
@@ -98,6 +113,7 @@ func checkFlowContinues(scope *gocb.Scope, gameId int64) {
 		err := queryResult.Row(&result)
 		if err != nil {
 			log.Println(err)
+			return err
 		}
 		// map[$1:0]
 		resultMap := result.(map[string]interface{})
@@ -106,10 +122,13 @@ func checkFlowContinues(scope *gocb.Scope, gameId int64) {
 
 	if err := queryResult.Err(); err != nil {
 		log.Println(err)
+		return err
 	}
+
+	return nil
 }
 
-func checkNodeContinues(scope *gocb.Scope, gameId int64) {
+func checkNodeContinues(scope *gocb.Scope, gameId int64) error {
 	queryResult, err := scope.Query(
 		fmt.Sprintf(
 			"SELECT META(d).id,  * FROM `%v-main` AS d UNNEST d.sis AS e LET sid_array = ARRAY v.sid FOR v IN d.sis WHEN v.sid IS NOT MISSING END WHERE ARRAY_LENGTH(d) != d.siNum OR ANY idx IN sid_array SATISFIES TO_NUMBER(SUBSTR(e.hashr, 0, POSITION(e.hashr, \":\"))) != ARRAY_POSITION(sid_array, e.sid) END limit 1;", gameId),
@@ -119,7 +138,7 @@ func checkNodeContinues(scope *gocb.Scope, gameId int64) {
 	)
 	if err != nil {
 		log.Println(err)
-		return
+		return err
 	}
 
 	// Print each found Row
@@ -130,16 +149,20 @@ func checkNodeContinues(scope *gocb.Scope, gameId int64) {
 			log.Println(err)
 		}
 		// map[$1:0]
-		resultMap := result.([]interface{})[0].(map[string]interface{})
+		resultMap := result.(map[string]interface{})
 		fmt.Printf("节点顺序检查返回->%v\n", resultMap["id"])
+		return err
 	}
 
 	if err := queryResult.Err(); err != nil {
 		log.Println(err)
+		return err
 	}
+
+	return nil
 }
 
-func checkWeightEqZero(scope *gocb.Scope, gameId int64, bbm int) {
+func checkWeightEqZero(scope *gocb.Scope, gameId int64, bbm int) error {
 	queryResult, err := scope.Query(
 		fmt.Sprintf(
 			"select id, realW, expectedW from (SELECT meta().id as id , TO_NUMBER(w) as realW, %v * TO_NUMBER(sis[siNum-1].aw) / TO_NUMBER(sis[siNum-1].tbb) as expectedW FROM `%v-main`) as result WHERE realW != expectedW and realW = 0 limit 1", bbm, gameId),
@@ -149,7 +172,7 @@ func checkWeightEqZero(scope *gocb.Scope, gameId int64, bbm int) {
 	)
 	if err != nil {
 		log.Println(err)
-		return
+		return err
 	}
 
 	// Print each found Row
@@ -158,6 +181,7 @@ func checkWeightEqZero(scope *gocb.Scope, gameId int64, bbm int) {
 		err := queryResult.Row(&result)
 		if err != nil {
 			log.Println(err)
+			return err
 		}
 		// map[expectedW:5 id:1719672873856#-1614417189 realW:0]
 		resultMap := result.(map[string]interface{})
@@ -167,10 +191,13 @@ func checkWeightEqZero(scope *gocb.Scope, gameId int64, bbm int) {
 
 	if err := queryResult.Err(); err != nil {
 		log.Println(err)
+		return err
 	}
+
+	return nil
 }
 
-func checkWeightNeZero(scope *gocb.Scope, gameId int64, bbm int) {
+func checkWeightNeZero(scope *gocb.Scope, gameId int64, bbm int) error {
 	queryResult, err := scope.Query(
 		fmt.Sprintf(
 			"select id, realW, expectedW from (SELECT meta().id as id , TO_NUMBER(w) as realW, %v * TO_NUMBER(sis[siNum-1].aw) / TO_NUMBER(sis[siNum-1].tbb) as expectedW FROM `%v-main`) as result WHERE realW != expectedW and realW != 0 limit 1", bbm, gameId),
@@ -180,7 +207,7 @@ func checkWeightNeZero(scope *gocb.Scope, gameId int64, bbm int) {
 	)
 	if err != nil {
 		log.Println(err)
-		return
+		return err
 	}
 
 	// Print each found Row
@@ -189,6 +216,7 @@ func checkWeightNeZero(scope *gocb.Scope, gameId int64, bbm int) {
 		err := queryResult.Row(&result)
 		if err != nil {
 			log.Println(err)
+			return err
 		}
 		// map[expectedW:5 id:1719672873856#-1614417189 realW:0]
 		resultMap := result.(map[string]interface{})
@@ -198,10 +226,13 @@ func checkWeightNeZero(scope *gocb.Scope, gameId int64, bbm int) {
 
 	if err := queryResult.Err(); err != nil {
 		log.Println(err)
+		return err
 	}
+
+	return nil
 }
 
-func checkSummary(scope *gocb.Scope, gameId int64) {
+func checkSummary(scope *gocb.Scope, gameId int64) error {
 	queryResult, err := scope.Query(
 		fmt.Sprintf(
 			"SELECT (SELECT COUNT(*) FROM `%v-main`) AS totalDocs, (SELECT COUNT(*) FROM `%v-main` WHERE consistent=false) AS unConsistentDocs, (SELECT COUNT(*) FROM `%v-main` WHERE w='0') AS noPrizeDocs, (SELECT COUNT(*) FROM `%v-main` WHERE w!='0')  AS prizeDocs, (SELECT COUNT(*) FROM `%v-main` WHERE siNum >= 10)  AS bigPrizeDocs", gameId, gameId, gameId, gameId, gameId),
@@ -211,7 +242,7 @@ func checkSummary(scope *gocb.Scope, gameId int64) {
 	)
 	if err != nil {
 		log.Println(err)
-		return
+		return err
 	}
 
 	// Print each found Row
@@ -220,6 +251,7 @@ func checkSummary(scope *gocb.Scope, gameId int64) {
 		err := queryResult.Row(&result)
 		if err != nil {
 			log.Println(err)
+			return err
 		}
 		//map[bigPrizeDocs:[map[$1:0]] noPrizeDocs:[map[$1:1.379856e+06]] prizeDocs:[map[$1:412774]] totalDocs:[map[$1:1.79263e+06]] unConsistentDocs:[map[$1:0]]]
 		resultMap := result.(map[string]interface{})
@@ -234,5 +266,8 @@ func checkSummary(scope *gocb.Scope, gameId int64) {
 
 	if err := queryResult.Err(); err != nil {
 		log.Println(err)
+		return err
 	}
+
+	return nil
 }
