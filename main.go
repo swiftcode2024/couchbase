@@ -6,10 +6,12 @@ import (
 	"os"
 	"time"
 
+	"cryptware.lk/couchbase/game"
 	"github.com/couchbase/gocb/v2"
 )
 
 func main() {
+	//gocb.SetLogger(gocb.VerboseStdioLogger())
 	args := os.Args[1:]
 
 	connectionString := args[0]
@@ -30,9 +32,9 @@ func main() {
 		log.Fatal(err)
 	}
 
-	cluster, err := gocb.Connect("couchbases://"+connectionString, options)
+	cluster, err := gocb.Connect(connectionString, options)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("连接失败:%v", err)
 	}
 
 	bucket := cluster.Bucket(bucketName)
@@ -44,25 +46,35 @@ func main() {
 
 	// Perform a N1QL Query
 	defaultScope := bucket.Scope("_default")
-	queryResult, err := defaultScope.Query(
-		fmt.Sprintf("select id, realW, expectedW from (SELECT meta().id as id , TO_NUMBER(w) as realW, 30 * TO_NUMBER(sis[siNum-1].aw) / TO_NUMBER(sis[siNum-1].tbb) as expectedW FROM `48-main`) as result WHERE realW != expectedW and realW != 0 limit 1;"),
-		&gocb.QueryOptions{},
-	)
-	if err != nil {
-		log.Fatal(err)
-	}
 
-	// Print each found Row
-	for queryResult.Next() {
-		var result interface{}
-		err := queryResult.Row(&result)
+	for i := 0; i < len(game.GameList); i++ {
+
+		gameId := game.GameList[i].GameId
+		bbm := game.GameList[i].Bbm
+		log.Printf("检查游戏:%v bbm:%v", gameId, bbm)
+
+		queryResult, err := defaultScope.Query(
+			fmt.Sprintf(
+				"select id, realW, expectedW from (SELECT meta().id as id , TO_NUMBER(w) as realW, %v * TO_NUMBER(sis[siNum-1].aw) / TO_NUMBER(sis[siNum-1].tbb) as expectedW FROM `%v-main`) as result WHERE realW != expectedW and realW = 0 limit 1", bbm, gameId),
+			&gocb.QueryOptions{},
+		)
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Println(result)
-	}
 
-	if err := queryResult.Err(); err != nil {
-		log.Fatal(err)
+		// Print each found Row
+		for queryResult.Next() {
+			var result interface{}
+			err := queryResult.Row(&result)
+			if err != nil {
+				log.Fatal(err)
+			}
+			fmt.Println(result)
+		}
+
+		if err := queryResult.Err(); err != nil {
+			log.Fatal(err)
+		}
+
 	}
 }
