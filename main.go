@@ -71,6 +71,7 @@ func main() {
 		log.Printf("检查游戏:%v bbm:%v", gameId, bbm)
 
 		checkFlowContinues(defaultScope, gameId)
+		checkNodeContinues(defaultScope, gameId)
 		checkWeightEqZero(defaultScope, gameId, bbm)
 		checkWeightNeZero(defaultScope, gameId, bbm)
 		checkSummary(defaultScope, gameId)
