@@ -70,7 +70,7 @@ func main() {
 		}
 		log.Printf("检查游戏:%v bbm:%v", gameId, bbm)
 
-		checkContinues(defaultScope, gameId)
+		checkFlowContinues(defaultScope, gameId)
 		checkWeightEqZero(defaultScope, gameId, bbm)
 		checkWeightNeZero(defaultScope, gameId, bbm)
 		checkSummary(defaultScope, gameId)
@@ -78,7 +78,7 @@ func main() {
 	}
 }
 
-func checkContinues(scope *gocb.Scope, gameId int64) {
+func checkFlowContinues(scope *gocb.Scope, gameId int64) {
 	queryResult, err := scope.Query(
 		fmt.Sprintf(
 			"select count(*) from `%v-main` where consistent = false or sis[0].hashr not like '0:%%'", gameId),
@@ -98,8 +98,39 @@ func checkContinues(scope *gocb.Scope, gameId int64) {
 		if err != nil {
 			log.Println(err)
 		}
+		// map[$1:0]
 		resultMap := result.(map[string]interface{})
-		fmt.Printf("连续性检查返回:%v\n", resultMap["$1"])
+		fmt.Printf("流异常检查返回->%v\n", resultMap["$1"])
+	}
+
+	if err := queryResult.Err(); err != nil {
+		log.Println(err)
+	}
+}
+
+func checkNodeContinues(scope *gocb.Scope, gameId int64) {
+	queryResult, err := scope.Query(
+		fmt.Sprintf(
+			"SELECT META(d).id,  * FROM `%v-main` AS d UNNEST d.sis AS e LET sid_array = ARRAY v.sid FOR v IN d.sis WHEN v.sid IS NOT MISSING END WHERE ARRAY_LENGTH(d) != d.siNum OR ANY idx IN sid_array SATISFIES TO_NUMBER(SUBSTR(e.hashr, 0, POSITION(e.hashr, \":\"))) != ARRAY_POSITION(sid_array, e.sid) END limit 1;", gameId),
+		&gocb.QueryOptions{
+			Timeout: 10 * time.Minute,
+		},
+	)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	// Print each found Row
+	for queryResult.Next() {
+		var result interface{}
+		err := queryResult.Row(&result)
+		if err != nil {
+			log.Println(err)
+		}
+		// map[$1:0]
+		resultMap := result.(map[string]interface{})
+		fmt.Printf("节点顺序检查返回->%v\n", resultMap["$1"])
 	}
 
 	if err := queryResult.Err(); err != nil {
@@ -127,7 +158,10 @@ func checkWeightEqZero(scope *gocb.Scope, gameId int64, bbm int) {
 		if err != nil {
 			log.Println(err)
 		}
-		fmt.Printf("权重检查w=0返回:%v\n", result)
+		// map[expectedW:5 id:1719672873856#-1614417189 realW:0]
+		resultMap := result.(map[string]interface{})
+		fmt.Printf("权重检查w=0返回->expectedW:%v realW:%v id:%v\n",
+			resultMap["expectedW"], resultMap["realW"], resultMap["id"])
 	}
 
 	if err := queryResult.Err(); err != nil {
@@ -155,7 +189,10 @@ func checkWeightNeZero(scope *gocb.Scope, gameId int64, bbm int) {
 		if err != nil {
 			log.Println(err)
 		}
-		fmt.Printf("权重检查w!=0返回:%v\n", result)
+		// map[expectedW:5 id:1719672873856#-1614417189 realW:0]
+		resultMap := result.(map[string]interface{})
+		fmt.Printf("权重检查w!=0返回->expectedW:%v realW:%v id:%v\n",
+			resultMap["expectedW"], resultMap["realW"], resultMap["id"])
 	}
 
 	if err := queryResult.Err(); err != nil {
@@ -183,7 +220,15 @@ func checkSummary(scope *gocb.Scope, gameId int64) {
 		if err != nil {
 			log.Println(err)
 		}
-		fmt.Printf("综合检查返回:%v\n", result)
+		//map[bigPrizeDocs:[map[$1:0]] noPrizeDocs:[map[$1:1.379856e+06]] prizeDocs:[map[$1:412774]] totalDocs:[map[$1:1.79263e+06]] unConsistentDocs:[map[$1:0]]]
+		resultMap := result.(map[string]interface{})
+		bigPrizeDocs := resultMap["bigPrizeDocs"].([]interface{})[0].(map[string]interface{})
+		noPrizeDocs := resultMap["noPrizeDocs"].([]interface{})[0].(map[string]interface{})
+		prizeDocs := resultMap["prizeDocs"].([]interface{})[0].(map[string]interface{})
+		totalDocs := resultMap["totalDocs"].([]interface{})[0].(map[string]interface{})
+		unConsistentDocs := resultMap["unConsistentDocs"].([]interface{})[0].(map[string]interface{})
+		fmt.Printf("综合检查返回->bigPrizeDocs:%v noPrizeDocs:%v prizeDocs:%v totalDocs:%v unConsistentDocs:%v \n",
+			bigPrizeDocs["$1"], noPrizeDocs["$1"], prizeDocs["$1"], totalDocs["$1"], unConsistentDocs["$1"])
 	}
 
 	if err := queryResult.Err(); err != nil {
