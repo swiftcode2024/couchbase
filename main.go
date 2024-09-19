@@ -147,11 +147,11 @@ func checkNodeContinues(scope *gocb.Scope, gameId int64) error {
 		err := queryResult.Row(&result)
 		if err != nil {
 			log.Println(err)
+			return err
 		}
 		// map[$1:0]
 		resultMap := result.(map[string]interface{})
 		fmt.Printf("节点顺序检查返回->%v\n", resultMap["id"])
-		return err
 	}
 
 	if err := queryResult.Err(); err != nil {
