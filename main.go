@@ -78,14 +78,18 @@ func main() {
 		if err != nil {
 			continue
 		}
-		err = checkWeightEqZero(defaultScope, gameId, bbm)
+		err = checkWeight(defaultScope, gameId, bbm)
 		if err != nil {
 			continue
 		}
-		err = checkWeightNeZero(defaultScope, gameId, bbm)
-		if err != nil {
-			continue
-		}
+		// err = checkWeightEqZero(defaultScope, gameId, bbm)
+		// if err != nil {
+		// 	continue
+		// }
+		// err = checkWeightNeZero(defaultScope, gameId, bbm)
+		// if err != nil {
+		// 	continue
+		// }
 		err = checkSummary(defaultScope, gameId)
 		if err != nil {
 			continue
@@ -131,7 +135,7 @@ func checkFlowContinues(scope *gocb.Scope, gameId int64) error {
 func checkNodeContinues(scope *gocb.Scope, gameId int64) error {
 	queryResult, err := scope.Query(
 		fmt.Sprintf(
-			"SELECT META(d).id,  * FROM `%v-main` AS d UNNEST d.sis AS e LET sid_array = ARRAY v.sid FOR v IN d.sis WHEN v.sid IS NOT MISSING END WHERE ARRAY_LENGTH(d) != d.siNum OR ANY idx IN sid_array SATISFIES TO_NUMBER(SUBSTR(e.hashr, 0, POSITION(e.hashr, \":\"))) != ARRAY_POSITION(sid_array, e.sid) END limit 1;", gameId),
+			"SELECT COUNT(*) FROM `%v-main` AS d LET sid_array = ARRAY v.sid FOR v IN d.sis WHEN v.sid IS NOT MISSING END WHERE ARRAY_LENGTH(d.sis) != d.siNum OR ANY v IN d.sis SATISFIES TO_NUMBER(SUBSTR(v.hashr, 0, POSITION(v.hashr, \":\"))) != ARRAY_POSITION(sid_array, v.sid) END;", gameId),
 		&gocb.QueryOptions{
 			Timeout: 10 * time.Minute,
 		},
@@ -151,7 +155,42 @@ func checkNodeContinues(scope *gocb.Scope, gameId int64) error {
 		}
 		// map[$1:0]
 		resultMap := result.(map[string]interface{})
-		fmt.Printf("节点顺序检查返回->%v\n", resultMap["id"])
+		fmt.Printf("节点顺序检查返回->%v\n", resultMap["$1"])
+	}
+
+	if err := queryResult.Err(); err != nil {
+		log.Println(err)
+		return err
+	}
+
+	return nil
+}
+
+func checkWeight(scope *gocb.Scope, gameId int64, bbm int) error {
+	queryResult, err := scope.Query(
+		fmt.Sprintf(
+			"select id, realW, expectedW from (SELECT meta().id as id , TO_NUMBER(w) as realW, %v * TO_NUMBER(sis[siNum-1].aw) / TO_NUMBER(sis[siNum-1].tbb) as expectedW FROM `%v-main`) as result WHERE realW != expectedW limit 1", bbm, gameId),
+		&gocb.QueryOptions{
+			Timeout: 10 * time.Minute,
+		},
+	)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+
+	// Print each found Row
+	for queryResult.Next() {
+		var result interface{}
+		err := queryResult.Row(&result)
+		if err != nil {
+			log.Println(err)
+			return err
+		}
+		// map[expectedW:5 id:1719672873856#-1614417189 realW:0]
+		resultMap := result.(map[string]interface{})
+		fmt.Printf("权重检查返回->expectedW:%v realW:%v id:%v\n",
+			resultMap["expectedW"], resultMap["realW"], resultMap["id"])
 	}
 
 	if err := queryResult.Err(); err != nil {
@@ -235,7 +274,7 @@ func checkWeightNeZero(scope *gocb.Scope, gameId int64, bbm int) error {
 func checkSummary(scope *gocb.Scope, gameId int64) error {
 	queryResult, err := scope.Query(
 		fmt.Sprintf(
-			"SELECT (SELECT COUNT(*) FROM `%v-main`) AS totalDocs, (SELECT COUNT(*) FROM `%v-main` WHERE consistent=false) AS unConsistentDocs, (SELECT COUNT(*) FROM `%v-main` WHERE w='0') AS noPrizeDocs, (SELECT COUNT(*) FROM `%v-main` WHERE w!='0')  AS prizeDocs, (SELECT COUNT(*) FROM `%v-main` WHERE siNum >= 10)  AS bigPrizeDocs", gameId, gameId, gameId, gameId, gameId),
+			"SELECT (SELECT COUNT(*) FROM `%v-main`) AS totalDocs, (SELECT COUNT(*) FROM `%v-main` WHERE consistent=false) AS unConsistentDocs, (SELECT COUNT(*) FROM `%v-main` WHERE w='0') AS noPrizeDocs, (SELECT COUNT(*) FROM `%v-main` WHERE w!='0')  AS prizeDocs, (SELECT COUNT(*) FROM `%v-main` WHERE siNum >= 8)  AS bigPrizeDocs", gameId, gameId, gameId, gameId, gameId),
 		&gocb.QueryOptions{
 			Timeout: 10 * time.Minute,
 		},
